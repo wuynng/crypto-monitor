@@ -1,0 +1,19 @@
+# 配置文件（敏感信息）
+config.yaml
+
+# 编译后程序
+crypto-monitor
+crypto-monitor-linux
+
+# Go 依赖
+vendor/
+go.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# PID 文件
+*.pid

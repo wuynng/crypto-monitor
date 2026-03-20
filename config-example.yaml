@@ -1,0 +1,32 @@
+dingtalk:
+  appKey: "your_app_key"
+  appSecret: "your_app_secret"
+  robotCode: "your_robot_code"
+  userId: "target_user_id"
+
+monitor:
+  interval: 60
+  threshold: 5
+
+alert:
+  cooldown: 6
+
+report:
+  times: [9, 15, 21]
+
+coins:
+  - id: bitcoin
+    symbol: BTC
+    name: 比特币
+  - id: ethereum
+    symbol: ETH
+    name: 以太坊
+  - id: solana
+    symbol: SOL
+    name: Solana
+  - id: tron
+    symbol: TRX
+    name: Tron
+  - id: filecoin
+    symbol: FIL
+    name: Filecoin
