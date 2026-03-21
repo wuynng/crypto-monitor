@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -116,12 +117,40 @@ func joinIDs(ids []string) string {
 }
 
 func FormatPrice(price float64) string {
-	if price >= 1000 {
-		return fmt.Sprintf("$%.2f", price)
-	} else if price >= 1 {
+	if price >= 100 {
+		return fmt.Sprintf("$%.0f", price)
+	} else if price > 1 {
+		return fmt.Sprintf("$%.1f", price)
+	} else if price > 0 && price < 1.0e-3 {
+		exp := int(math.Log10(price))
+		mantissa := price / math.Pow10(exp)
+		return fmt.Sprintf("$%.2fE%d", mantissa, exp)
+	} else if price >= 1.0e-3 {
 		return fmt.Sprintf("$%.4f", price)
 	}
-	return fmt.Sprintf("$%.6f", price)
+	return "$0"
+}
+
+func FormatPriceCompact(price float64) string {
+	if price >= 100 {
+		return fmt.Sprintf("%.0f", price)
+	} else if price > 1 {
+		return fmt.Sprintf("%.1f", price)
+	} else if price > 0 && price < 1.0e-3 {
+		exp := int(math.Floor(math.Log10(price)))
+		mantissa := price / math.Pow10(exp)
+		return fmt.Sprintf("%.2fE%d", mantissa, exp)
+	} else if price >= 1.0e-3 {
+		return fmt.Sprintf("%.4f", price)
+	}
+	return "0"
+}
+
+func FormatSymbol(symbol string) string {
+	if len(symbol) >= 4 {
+		return symbol
+	}
+	return symbol + strings.Repeat("&nbsp;", 4-len(symbol))
 }
 
 func FormatChange(change float64) string {

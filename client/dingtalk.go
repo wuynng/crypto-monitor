@@ -177,17 +177,18 @@ func (d *DingTalkClient) buildAlertMessage(prices []types.CoinPrice, threshold i
 	content.WriteString("## 🚨 加密货币价格告警\n\n")
 
 	sort.Slice(prices, func(i, j int) bool {
-		return prices[i].Change24h > prices[j].Change24h
+		return prices[i].Symbol < prices[j].Symbol
 	})
 
 	for _, p := range prices {
 		emoji := GetEmoji(p.Change24h)
 		changeStr := FormatChange(p.Change24h)
-		content.WriteString(fmt.Sprintf("- **%s**  %s | **%s** %s\n",
-			p.Symbol, FormatPrice(p.Price), changeStr, emoji))
+		symbol := FormatSymbol(p.Symbol)
+		content.WriteString(fmt.Sprintf("- **%s**  $%s | **%s** %s\n",
+			symbol, FormatPriceCompact(p.Price), changeStr, emoji))
 	}
 
-	content.WriteString(fmt.Sprintf("\n---\n⏰ ：%s", time.Now().Format("2006-01-02 15:04:05")))
+	content.WriteString(fmt.Sprintf("\n---\n⏰ %s", time.Now().Format("2006-01-02 15:04:05")))
 
 	return map[string]interface{}{
 		"msgtype": "markdown",
@@ -203,17 +204,18 @@ func (d *DingTalkClient) buildReportMessage(prices []types.CoinPrice) map[string
 	content.WriteString("## 📊 加密货币价格日报\n\n")
 
 	sort.Slice(prices, func(i, j int) bool {
-		return prices[i].Change24h > prices[j].Change24h
+		return prices[i].Symbol < prices[j].Symbol
 	})
 
 	for _, p := range prices {
 		emoji := GetEmoji(p.Change24h)
 		changeStr := FormatChange(p.Change24h)
-		content.WriteString(fmt.Sprintf("- **%s**  %s | **%s** %s\n",
-			p.Symbol, FormatPrice(p.Price), changeStr, emoji))
+		symbol := FormatSymbol(p.Symbol)
+		content.WriteString(fmt.Sprintf("- **%s**  $%s | **%s** %s\n",
+			symbol, FormatPriceCompact(p.Price), changeStr, emoji))
 	}
 
-	content.WriteString(fmt.Sprintf("\n---\n⏰ ：%s", time.Now().Format("2006-01-02 15:04:05")))
+	content.WriteString(fmt.Sprintf("\n---\n⏰ %s", time.Now().Format("2006-01-02 15:04:05")))
 
 	return map[string]interface{}{
 		"msgtype": "markdown",
