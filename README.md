@@ -129,3 +129,5 @@ coins:
 2. 项目已配置 `.gitignore`，会自动忽略敏感文件
 3. CoinGecko API 有速率限制，建议监控间隔不低于 30 分钟
 4. PID 文件存储在 `/tmp/crypto-monitor.pid`
+5. 钉钉 Stream 连接断开时会自动重连（指数退避：3s, 4s, 5s...）
+6. 确保服务器时间准确，否则钉钉签名验证会失败

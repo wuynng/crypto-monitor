@@ -20,46 +20,95 @@ import (
 )
 
 type DingTalkClient struct {
-	streamClient *client.StreamClient
-	appKey       string
-	appSecret    string
-	robotCode    string
-	userId       string
-	config       *types.Config
-	coingecko    *CoinGeckoClient
-	mu           sync.Mutex
-	sender       *chatbot.ChatbotReplier
+	streamClient   *client.StreamClient
+	appKey         string
+	appSecret      string
+	robotCode      string
+	userId         string
+	config         *types.Config
+	coingecko      *CoinGeckoClient
+	mu             sync.Mutex
+	sender         *chatbot.ChatbotReplier
+	ctx            context.Context
+	cancel         context.CancelFunc
+	isConnected    bool
+	reconnectCount int
 }
 
 func NewDingTalkClient(appKey, appSecret, robotCode, userId string, cfg *types.Config, cg *CoinGeckoClient) *DingTalkClient {
 	logger.SetLogger(logger.NewStdTestLogger())
 
-	cli := client.NewStreamClient(
-		client.WithAppCredential(client.NewAppCredentialConfig(appKey, appSecret)),
-	)
-
 	d := &DingTalkClient{
-		streamClient: cli,
-		appKey:       appKey,
-		appSecret:    appSecret,
-		robotCode:    robotCode,
-		userId:       userId,
-		config:       cfg,
-		coingecko:    cg,
-		sender:       chatbot.NewChatbotReplier(),
+		appKey:    appKey,
+		appSecret: appSecret,
+		robotCode: robotCode,
+		userId:    userId,
+		config:    cfg,
+		coingecko: cg,
+		sender:    chatbot.NewChatbotReplier(),
 	}
-
-	cli.RegisterChatBotCallbackRouter(d.OnChatBotMessageReceived)
 
 	return d
 }
 
 func (d *DingTalkClient) Start(ctx context.Context) error {
-	return d.streamClient.Start(ctx)
+	d.ctx, d.cancel = context.WithCancel(ctx)
+	go d.runWithReconnect()
+	return nil
+}
+
+func (d *DingTalkClient) runWithReconnect() {
+	for {
+		select {
+		case <-d.ctx.Done():
+			logger.GetLogger().Infof("Stream 客户端已停止")
+			return
+		default:
+			d.connect()
+		}
+	}
+}
+
+func (d *DingTalkClient) connect() {
+	defer func() {
+		if err := recover(); err != nil {
+			d.reconnectCount++
+			delay := time.Duration(3+d.reconnectCount) * time.Second
+			logger.GetLogger().Errorf("Stream 连接异常：%v, %v 后重连 (第%d次)", err, delay, d.reconnectCount)
+			time.Sleep(delay)
+		}
+	}()
+
+	if d.streamClient == nil {
+		d.streamClient = client.NewStreamClient(
+			client.WithAppCredential(client.NewAppCredentialConfig(d.appKey, d.appSecret)),
+			client.WithAutoReconnect(true),
+		)
+		d.streamClient.RegisterChatBotCallbackRouter(d.OnChatBotMessageReceived)
+	}
+
+	logger.GetLogger().Infof("正在连接钉钉 Stream...")
+	err := d.streamClient.Start(d.ctx)
+	if err != nil {
+		logger.GetLogger().Errorf("Stream 连接失败：%v", err)
+	}
+
+	d.isConnected = true
+	d.reconnectCount = 0
+	logger.GetLogger().Infof("钉钉 Stream 已连接")
+
+	<-d.ctx.Done()
+	d.isConnected = false
 }
 
 func (d *DingTalkClient) Close() {
-	d.streamClient.Close()
+	if d.cancel != nil {
+		d.cancel()
+	}
+	if d.streamClient != nil {
+		d.streamClient.Close()
+	}
+	logger.GetLogger().Infof("Stream 客户端已关闭")
 }
 
 func (d *DingTalkClient) OnChatBotMessageReceived(ctx context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
