@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -27,11 +26,9 @@ type DingTalkClient struct {
 	userId         string
 	config         *types.Config
 	coingecko      *CoinGeckoClient
-	mu             sync.Mutex
 	sender         *chatbot.ChatbotReplier
 	ctx            context.Context
 	cancel         context.CancelFunc
-	isConnected    bool
 	reconnectCount int
 }
 
@@ -64,41 +61,57 @@ func (d *DingTalkClient) runWithReconnect() {
 			logger.GetLogger().Infof("Stream 客户端已停止")
 			return
 		default:
-			d.connect()
+			// 尝试连接
+			err := d.connect()
+			if err == nil {
+				// 连接成功，重置计数器
+				d.reconnectCount = 0
+				logger.GetLogger().Infof("Stream 客户端运行中，等待信号...")
+
+				// 等待 context 取消（Close 被调用）
+				<-d.ctx.Done()
+				return
+			}
+
+			// 连接失败，执行延迟重试
+			d.reconnectCount++
+			delay := time.Duration(minInt(3+d.reconnectCount, 60)) * time.Second
+			logger.GetLogger().Errorf("Stream 连接失败：%v，%v 后重试 (第%d次)", err, delay, d.reconnectCount)
+
+			select {
+			case <-time.After(delay):
+				// 继续下一次重试
+			case <-d.ctx.Done():
+				return
+			}
 		}
 	}
 }
 
-func (d *DingTalkClient) connect() {
+func (d *DingTalkClient) connect() error {
 	defer func() {
 		if err := recover(); err != nil {
-			d.reconnectCount++
-			delay := time.Duration(3+d.reconnectCount) * time.Second
-			logger.GetLogger().Errorf("Stream 连接异常：%v, %v 后重连 (第%d次)", err, delay, d.reconnectCount)
-			time.Sleep(delay)
+			logger.GetLogger().Errorf("Stream 连接发生 Panic：%v", err)
 		}
 	}()
 
-	if d.streamClient == nil {
-		d.streamClient = client.NewStreamClient(
-			client.WithAppCredential(client.NewAppCredentialConfig(d.appKey, d.appSecret)),
-			client.WithAutoReconnect(true),
-		)
-		d.streamClient.RegisterChatBotCallbackRouter(d.OnChatBotMessageReceived)
+	// 清理旧客户端
+	if d.streamClient != nil {
+		d.streamClient.Close()
+		d.streamClient = nil
 	}
+
+	// 初始化新客户端
+	d.streamClient = client.NewStreamClient(
+		client.WithAppCredential(client.NewAppCredentialConfig(d.appKey, d.appSecret)),
+		client.WithAutoReconnect(true),
+	)
+	d.streamClient.RegisterChatBotCallbackRouter(d.OnChatBotMessageReceived)
 
 	logger.GetLogger().Infof("正在连接钉钉 Stream...")
-	err := d.streamClient.Start(d.ctx)
-	if err != nil {
-		logger.GetLogger().Errorf("Stream 连接失败：%v", err)
-	}
 
-	d.isConnected = true
-	d.reconnectCount = 0
-	logger.GetLogger().Infof("钉钉 Stream 已连接")
-
-	<-d.ctx.Done()
-	d.isConnected = false
+	// 启动连接
+	return d.streamClient.Start(d.ctx)
 }
 
 func (d *DingTalkClient) Close() {
@@ -189,15 +202,7 @@ func (d *DingTalkClient) sendMessageToUser(msg map[string]interface{}) error {
 
 	accessToken, err := d.getAccessToken()
 	if err != nil {
-		return err
-	}
-
-	robotClient, err := dingtalkrobot_1_0.NewClient(&openapi.Config{
-		Protocol: tea.String("https"),
-		RegionId: tea.String("central"),
-	})
-	if err != nil {
-		return fmt.Errorf("创建robot客户端失败: %w", err)
+		return fmt.Errorf("获取 access_token 失败: %w", err)
 	}
 
 	markdownMsg := fmt.Sprintf(`{"text": "%s", "title": "%s"}`, text, title)
@@ -210,6 +215,14 @@ func (d *DingTalkClient) sendMessageToUser(msg map[string]interface{}) error {
 		UserIds:   []*string{tea.String(d.userId)},
 		MsgKey:    tea.String("sampleMarkdown"),
 		MsgParam:  tea.String(markdownMsg),
+	}
+
+	robotClient, err := dingtalkrobot_1_0.NewClient(&openapi.Config{
+		Protocol: tea.String("https"),
+		RegionId: tea.String("central"),
+	})
+	if err != nil {
+		return fmt.Errorf("创建robot客户端失败: %w", err)
 	}
 
 	_, err = robotClient.BatchSendOTOWithOptions(request, headers, &util.RuntimeOptions{})
@@ -246,6 +259,13 @@ func (d *DingTalkClient) buildAlertMessage(prices []types.CoinPrice, threshold i
 			"text":  content.String(),
 		},
 	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (d *DingTalkClient) buildReportMessage(prices []types.CoinPrice) map[string]interface{} {

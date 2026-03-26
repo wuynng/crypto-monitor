@@ -69,6 +69,30 @@ coins:
 ./crypto-monitor alert
 ```
 
+## 编译与发布
+
+### 本地编译
+
+```bash
+# 当前平台编译
+go build -o crypto-monitor main.go
+
+# 指定版本构建（可选）
+CGO_ENABLED=0 GOOS=$(uname | tr '[:upper:]' '[:lower:]') GOARCH=amd64 go build -o crypto-monitor main.go
+```
+
+### Linux 交叉编译
+
+```bash
+# 在 macOS 上交叉编译 x86_64 Linux 可执行文件
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o crypto-monitor-linux main.go
+
+# 在 macOS 上交叉编译 ARM64 Linux 可执行文件（如 Raspberry Pi）
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o crypto-monitor-linux-arm64 main.go
+```
+
+> 提示：如果需要其他架构，修改 `GOARCH` 为 `386` / `arm` / `arm64` / `ppc64le` / `s390x` 等。
+
 ## 命令说明
 
 | 命令 | 功能 |
