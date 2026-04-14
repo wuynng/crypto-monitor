@@ -1,0 +1,28 @@
+[Unit]
+Description=Crypto Monitor Service
+After=network.target
+
+[Service]
+# 工作目录（重要：这是 ./ 相对路径的基准）
+WorkingDirectory=/home/ubuntu/crypto-monitor
+
+# 执行用户（可选，建议使用非root用户）
+User=ubuntu
+Group=ubuntu
+
+# 执行命令（不需要 nohup 和 &）
+ExecStart=/home/ubuntu/crypto-monitor/crypto-monitor-linux start
+
+# 重启策略
+Restart=on-failure
+RestartSec=5s
+
+# 日志输出到指定文件
+StandardOutput=append:/home/ubuntu/crypto-monitor/crypto-monitor.log
+StandardError=append:/home/ubuntu/crypto-monitor/crypto-monitor.log
+
+# 资源限制（可选）
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
